@@ -1,4 +1,5 @@
 #include <v8.h>
+#include <nan.h>
 #include <node.h>
 #include <uv.h>
 #include <stdlib.h>
@@ -22,7 +23,8 @@ static uv_timer_t s_timer;
 static uint32_t s_currentLag;
 static uint64_t s_lastMark;
 
-Handle<Value> TooBusy(const Arguments& args) {
+NAN_METHOD(TooBusy) {
+    NanScope();
     // No HandleScope required, because this function allocates no
     // v8 classes that reside on the heap.
     bool block = false;
@@ -34,44 +36,42 @@ Handle<Value> TooBusy(const Arguments& args) {
         double r = (rand() / (double) RAND_MAX) * 100.0;
         if (r < pctToBlock) block = true;
     }
-    return block ? True() : False();
+    NanReturnValue(NanNew(block));
 }
 
-Handle<Value> ShutDown(const Arguments& args) {
+NAN_METHOD(ShutDown) {
     // No HandleScope required, because this function allocates no
     // v8 classes that reside on the heap.
 
     uv_timer_stop(&s_timer);
-    return Undefined();
+
+    NanReturnUndefined();
 }
 
-Handle<Value> Lag(const Arguments& args) {
-    HandleScope scope;
-    return scope.Close(Integer::New(s_currentLag));
+NAN_METHOD(Lag) {
+    NanScope();
+    NanReturnValue(NanNew(s_currentLag));
 }
 
-Handle<Value> HighWaterMark(const Arguments& args) {
-    HandleScope scope;
-
+NAN_METHOD(HighWaterMark) {
+    NanScope();
     if (args.Length() >= 1) {
         if (!args[0]->IsNumber()) {
-            return v8::ThrowException(
-                v8::Exception::Error(
-                    v8::String::New("expected numeric first argument")));
+            NanThrowError("expected numeric first argument");
+            NanReturnUndefined();
         }
         int hwm = args[0]->Int32Value();
         if (hwm < 10) {
-            return v8::ThrowException(
-                v8::Exception::Error(
-                    v8::String::New("maximum lag should be greater than 10ms")));
+            NanThrowError("maximum lag should be greater than 10ms");
+            NanReturnUndefined();
         }
         HIGH_WATER_MARK_MS = hwm;
     }
 
-    return scope.Close(Number::New(HIGH_WATER_MARK_MS));
+    NanReturnValue(NanNew(HIGH_WATER_MARK_MS));
 }
 
-static void every_second(uv_timer_t* handle, int status)
+static void every_second(uv_timer_t* handle)
 {
     uint64_t now = uv_hrtime();
 
@@ -85,13 +85,25 @@ static void every_second(uv_timer_t* handle, int status)
     s_lastMark = now;
 };
 
-extern "C" void init(Handle<Object> target) {
-    HandleScope scope;
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
+static void every_second(uv_timer_t* handle, int) {
+    every_second(handle);
+}
+#pragma GCC diagnostic pop
 
-    target->Set(String::New("toobusy"), FunctionTemplate::New(TooBusy)->GetFunction());
-    target->Set(String::New("shutdown"), FunctionTemplate::New(ShutDown)->GetFunction());
-    target->Set(String::New("lag"), FunctionTemplate::New(Lag)->GetFunction());
-    target->Set(String::New("maxLag"), FunctionTemplate::New(HighWaterMark)->GetFunction());
+extern "C" void init(Handle<Object> exports) {
+    NanScope();
+
+    exports->Set(NanNew("toobusy"),
+                 NanNew<FunctionTemplate>(TooBusy)->GetFunction());
+    exports->Set(NanNew("shutdown"),
+                 NanNew<FunctionTemplate>(ShutDown)->GetFunction());
+    exports->Set(NanNew("lag"),
+                 NanNew<FunctionTemplate>(Lag)->GetFunction());
+    exports->Set(NanNew("maxLag"),
+                 NanNew<FunctionTemplate>(HighWaterMark)->GetFunction());
+
     uv_timer_init(uv_default_loop(), &s_timer);
     uv_timer_start(&s_timer, every_second, POLL_PERIOD_MS, POLL_PERIOD_MS);
 };
