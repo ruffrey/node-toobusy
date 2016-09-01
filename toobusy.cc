@@ -24,7 +24,7 @@ static uint32_t s_currentLag;
 static uint64_t s_lastMark;
 
 NAN_METHOD(TooBusy) {
-    NanScope();
+    Nan::HandleScope scope;
     // No HandleScope required, because this function allocates no
     // v8 classes that reside on the heap.
     bool block = false;
@@ -36,7 +36,7 @@ NAN_METHOD(TooBusy) {
         double r = (rand() / (double) RAND_MAX) * 100.0;
         if (r < pctToBlock) block = true;
     }
-    NanReturnValue(NanNew(block));
+    info.GetReturnValue().Set(Nan::New(block));
 }
 
 NAN_METHOD(ShutDown) {
@@ -45,30 +45,30 @@ NAN_METHOD(ShutDown) {
 
     uv_timer_stop(&s_timer);
 
-    NanReturnUndefined();
+    return;
 }
 
 NAN_METHOD(Lag) {
-    NanScope();
-    NanReturnValue(NanNew(s_currentLag));
+    Nan::HandleScope scope;
+    info.GetReturnValue().Set(Nan::New(s_currentLag));
 }
 
 NAN_METHOD(HighWaterMark) {
-    NanScope();
-    if (args.Length() >= 1) {
-        if (!args[0]->IsNumber()) {
-            NanThrowError("expected numeric first argument");
-            NanReturnUndefined();
+    Nan::HandleScope scope;
+    if (info.Length() >= 1) {
+        if (!info[0]->IsNumber()) {
+            Nan::ThrowError("expected numeric first argument");
+            return;
         }
-        int hwm = args[0]->Int32Value();
+        int hwm = info[0]->Int32Value();
         if (hwm < 10) {
-            NanThrowError("maximum lag should be greater than 10ms");
-            NanReturnUndefined();
+            Nan::ThrowError("maximum lag should be greater than 10ms");
+            return;
         }
         HIGH_WATER_MARK_MS = hwm;
     }
 
-    NanReturnValue(NanNew(HIGH_WATER_MARK_MS));
+    info.GetReturnValue().Set(Nan::New(HIGH_WATER_MARK_MS));
 }
 
 static void every_second(uv_timer_t* handle)
@@ -93,16 +93,16 @@ static void every_second(uv_timer_t* handle, int) {
 #pragma GCC diagnostic pop
 
 extern "C" void init(Handle<Object> exports) {
-    NanScope();
+    Nan::HandleScope scope;
 
-    exports->Set(NanNew("toobusy"),
-                 NanNew<FunctionTemplate>(TooBusy)->GetFunction());
-    exports->Set(NanNew("shutdown"),
-                 NanNew<FunctionTemplate>(ShutDown)->GetFunction());
-    exports->Set(NanNew("lag"),
-                 NanNew<FunctionTemplate>(Lag)->GetFunction());
-    exports->Set(NanNew("maxLag"),
-                 NanNew<FunctionTemplate>(HighWaterMark)->GetFunction());
+    exports->Set(Nan::New("toobusy").ToLocalChecked(),
+                 Nan::New<FunctionTemplate>(TooBusy)->GetFunction());
+    exports->Set(Nan::New("shutdown").ToLocalChecked(),
+                 Nan::New<FunctionTemplate>(ShutDown)->GetFunction());
+    exports->Set(Nan::New("lag").ToLocalChecked(),
+                 Nan::New<FunctionTemplate>(Lag)->GetFunction());
+    exports->Set(Nan::New("maxLag").ToLocalChecked(),
+                 Nan::New<FunctionTemplate>(HighWaterMark)->GetFunction());
 
     uv_timer_init(uv_default_loop(), &s_timer);
     uv_timer_start(&s_timer, every_second, POLL_PERIOD_MS, POLL_PERIOD_MS);
